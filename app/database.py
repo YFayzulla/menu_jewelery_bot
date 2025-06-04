@@ -36,7 +36,7 @@ class Product(Base):
     sub_category_id = Column(Integer, ForeignKey('sub_categories.id'), nullable=False)
     sub_category = relationship("SubCategory", back_populates="products")
 
-# Helper functions
+# Database operations
 async def create_tables():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -55,22 +55,35 @@ async def get_products(subcategory_id: int):
     async with async_session() as session:
         result = await session.execute(select(Product).where(Product.sub_category_id == subcategory_id))
         return result.scalars().all()
-    
+
 async def create_category(name: str):
-    if not name or len(name) > 50:
-        raise ValueError("Category name must be 1-50 characters")
-        
-    existing = await get_category_by_name(name)
-    if existing:
-        raise ValueError("Category already exists")
-    
     async with async_session() as session:
         category = Category(name=name)
         session.add(category)
         await session.commit()
         return category
 
-async def get_category_by_name(name: str):
+async def delete_category(category_id: int):
     async with async_session() as session:
-        result = await session.execute(select(Category).where(Category.name == name))
-        return result.scalar_one_or_none()
+        category = await session.get(Category, category_id)
+        if category:
+            await session.delete(category)
+            await session.commit()
+            return True
+        return False
+
+async def create_subcategory(name: str, category_id: int):
+    async with async_session() as session:
+        subcategory = SubCategory(name=name, category_id=category_id)
+        session.add(subcategory)
+        await session.commit()
+        return subcategory
+
+async def delete_subcategory(subcategory_id: int):
+    async with async_session() as session:
+        subcategory = await session.get(SubCategory, subcategory_id)
+        if subcategory:
+            await session.delete(subcategory)
+            await session.commit()
+            return True
+        return False
