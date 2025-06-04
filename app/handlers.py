@@ -16,6 +16,11 @@ class AdminStates(StatesGroup):
     ADD_SUBCATEGORY = State()
     DELETE_SUBCATEGORY = State()
 
+
+def is_admin(user_id: int) -> bool:
+    return user_id == int(os.getenv("ADMIN_ID", "0"))
+
+
 class ChatCleaner:
     def __init__(self):
         self.last_user_message = None
@@ -90,12 +95,17 @@ async def show_categories(bot: Bot, chat_id: int):
         reply_markup=kb
     )
 
-# Start command handler
 @router.message(Command("start"))
 async def start(message: Message, state: FSMContext, bot: Bot):
-    await chat_cleaner.track_user_message(message)
     await state.clear()
-    await show_categories(bot, message.chat.id)
+
+    if  is_admin(message.from_user.id) :
+        # Greet admin
+        await bot.send_message(message.chat.id, "👋 Hi admin, I am here to assist you.")
+        await show_categories(bot, message.chat.id)
+    else:
+        # Greet non-admin user
+        await bot.send_message(message.chat.id, "🙋‍♂️ Hello! This bot is for admin use only.")
 
 # Callback handler for selecting a category
 @router.callback_query(F.data.startswith("cat_"))
