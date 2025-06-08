@@ -51,9 +51,9 @@ async def get_subcategories(category_id: int):
         result = await session.execute(select(SubCategory).where(SubCategory.category_id == category_id))
         return result.scalars().all()
 
-async def get_products(subcategory_id: int):
+async def get_product(subcategory_id: int):
     async with async_session() as session:
-        result = await session.execute(select(Product).where(Product.sub_category_id == subcategory_id))
+        result = await session.execute(select(Product).where(Product.subcategory_id == subcategory_id))
         return result.scalars().all()
 
 async def create_category(name: str):
@@ -84,6 +84,22 @@ async def delete_subcategory(subcategory_id: int):
         subcategory = await session.get(SubCategory, subcategory_id)
         if subcategory:
             await session.delete(subcategory)
+            await session.commit()
+            return True
+        return False
+    
+async def create_product(name: str, price: float, photo: str, sub_category_id: int):    
+    async with async_session() as session:
+        product = Product(name=name, price=price, photo=photo, sub_category_id=sub_category_id)
+        session.add(product)
+        await session.commit()
+        return product
+
+async def delete_product(product_id: int):
+    async with async_session() as session:
+        product = await session.get(Product, product_id)
+        if product:
+            await session.delete(product)
             await session.commit()
             return True
         return False
