@@ -84,8 +84,6 @@ async def show_categories(bot: Bot, chat_id: int):
 @router.message(Command("start"))
 async def start(message: Message, state: FSMContext, bot: Bot):
     await state.clear()
-
-    # Create persistent menu button
     menu_kb = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="📋 Menyu")]],
         resize_keyboard=True,
@@ -106,7 +104,6 @@ async def start(message: Message, state: FSMContext, bot: Bot):
             reply_markup=menu_kb
         )
 
-# Handle the menu button tap
 @router.message(F.text == "📋 Menyu")
 async def menu_button(message: Message, bot: Bot):
     await menu_command(message, bot)
@@ -242,7 +239,6 @@ async def add_subcategory_finish(message: Message, state: FSMContext, bot: Bot):
     await state.clear()
     await asyncio.sleep(2)
     
-    from aiogram.types import CallbackQuery
     fake_call = CallbackQuery(
         id="0",
         from_user=message.from_user,
@@ -352,7 +348,15 @@ async def show_product(call: CallbackQuery, state: FSMContext, bot: Bot, product
         row.append(InlineKeyboardButton(text="Keyingi ➡️", callback_data="next_product"))
     if row:
         kb.inline_keyboard.append(row)
-    kb.inline_keyboard.append([InlineKeyboardButton(text="🔙 Kategoriyalarga qaytish", callback_data=f"cat_{category.id}")])
+    if not is_admin(call.from_user.id):
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(text="🛒 Buyurtma berish", callback_data=f"order_{product.id}"),
+            InlineKeyboardButton(text="🔙 Kategoriyalarga qaytish", callback_data=f"cat_{category.id}")
+        ])
+    else:
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(text="🔙 Kategoriyalarga qaytish", callback_data=f"cat_{category.id}")
+        ])
     
     if product.photo:
         await bot.send_photo(
@@ -360,6 +364,7 @@ async def show_product(call: CallbackQuery, state: FSMContext, bot: Bot, product
             product.photo,
             caption=title,
             reply_markup=kb
+            
         )
     else:
         await chat_cleaner.send_bot_message(bot, call.message.chat.id, title, reply_markup=kb)
@@ -389,6 +394,100 @@ async def navigate_products(call: CallbackQuery, state: FSMContext, bot: Bot):
             return
     
     await show_product(call, state, bot, product, new_index, total_products)
+
+
+@router.callback_query(F.data.startswith("order_"))
+async def order_product_start(call: CallbackQuery, state: FSMContext, bot: Bot):
+    if is_admin(call.from_user.id):
+        await call.answer("Admin sifatida buyurtma berish mumkin emas!")
+        return
+
+    product_id = int(call.data.split("_")[1])
+    admin_id = int(os.getenv("ADMIN_ID", "0"))
+
+    async with async_session() as session:
+        product = await session.get(Product, product_id)
+        if not product:
+            await call.answer("Mahsulot topilmadi!")
+            return
+        subcategory = await session.get(SubCategory, product.sub_category_id)
+        category = await session.get(Category, subcategory.category_id)
+
+    # ✅ Formatlangan matn (toza)
+    caption = (
+        f"🛒 Buyurtma\n\n"
+        f"📦 Mahsulot: {product.name}\n"
+        f"💵 Narxi: {product.price}$\n"
+        f"📂 Kategoriya: {category.name}\n"
+        f"📁 Subkategoriya: {subcategory.name}\n\n"
+        f"👤 Foydalanuvchi: {call.from_user.full_name}"
+    )
+
+    # Admin chatga o'tish tugmasi
+    url = f"tg://user?id={admin_id}"
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✉️ Admin bilan yozish", url=url)],
+        [InlineKeyboardButton(text="🔙 Orqaga", callback_data=f"cat_{category.id}")]
+    ])
+
+    # 🖼 Foydalanuvchiga rasm + tayyor matn
+    if product.photo:
+        await bot.send_photo(
+            call.message.chat.id,
+            photo=product.photo,
+            caption=caption + "\n\n📩 Iltimos, ushbu xabarni admin bilan bo'lishing.",
+            reply_markup=kb,
+            # parse_mode="HTML"
+        )
+    else:
+        await bot.send_message(
+            call.message.chat.id,
+            text=caption + "\n\n📩 Iltimos, ushbu xabarni admin bilan bo'lishing.",
+            reply_markup=kb,
+            # parse_mode="HTML"
+        )
+
+    await state.clear()
+
+
+@router.callback_query(F.data.startswith("product_"))
+async def select_product(call: CallbackQuery, state: FSMContext, bot: Bot):
+    await state.clear()
+    product_id = int(call.data.split("_")[1])
+    async with async_session() as session:
+        product = await session.get(Product, product_id)
+        if not product:
+            await call.answer("Mahsulot topilmadi!")
+            return
+        subcategory = await session.get(SubCategory, product.sub_category_id)
+        category = await session.get(Category, subcategory.category_id)
+    
+    title = f"📋 {category.name} > {subcategory.name}\n\n"
+    title += f"Nomi: {hbold(product.name)}\n"
+    title += f"Narxi: {hbold(product.price)}$"
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+    if is_admin(call.from_user.id):
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(text="➕ Mahsulot qo'shish", callback_data=f"add_product_{subcategory.id}"),
+            InlineKeyboardButton(text="🗑️ Mahsulotni o'chirish", callback_data=f"delete_product_{subcategory.id}"),
+            InlineKeyboardButton(text="🔙 Orqaga", callback_data=f"cat_{category.id}")
+        ])
+    else:
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(text="🛒 Buyurtma berish", callback_data=f"order_{product.id}"),
+            InlineKeyboardButton(text="🔙 Orqaga", callback_data=f"cat_{category.id}")
+        ])
+    
+    if product.photo:
+        await bot.send_photo(
+            call.message.chat.id,
+            product.photo,
+            caption=title,
+            reply_markup=kb
+        )
+    else:
+        await chat_cleaner.send_bot_message(bot, call.message.chat.id, title, reply_markup=kb)
 
 class AddProductState(StatesGroup):
     WAITING_FOR_NAME = State()
@@ -490,6 +589,7 @@ async def finish_product_creation(message: Message, state: FSMContext, bot: Bot)
             price=price,
             photo=photo,
             sub_category_id=subcategory_id
+            
         )
         session.add(product)
         await session.commit()
@@ -506,6 +606,7 @@ async def finish_product_creation(message: Message, state: FSMContext, bot: Bot)
             message.chat.id,
             photo,
             caption=success_message
+            # parse_mode="HTML"
         )
     else:
         await chat_cleaner.send_bot_message(
@@ -513,6 +614,7 @@ async def finish_product_creation(message: Message, state: FSMContext, bot: Bot)
             message.chat.id,
             success_message,
             delete_previous=False
+            # parse_mode="HTML"
         )
     
     await state.clear()
