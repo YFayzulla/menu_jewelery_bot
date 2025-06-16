@@ -337,7 +337,7 @@ async def show_product(call: CallbackQuery, state: FSMContext, bot: Bot, product
     title = f"📋 {category.name} > {subcategory.name}\n\n"
     title += f"Mahsulot {current_index + 1}/{total_products}\n"
     title += f"Nomi: {hbold(product.name)}\n"
-    title += f"Narxi: {hbold(product.price)}"
+    title += f"usta xaqqi: {hbold(product.price)}"
     kb = InlineKeyboardMarkup(inline_keyboard=[])
     row = []
     if current_index > 0:
@@ -427,7 +427,7 @@ async def order_product_start(call: CallbackQuery, state: FSMContext, bot: Bot):
 
         f"🛒 Buyurtma\n\n"
         f"📦 Mahsulot: {product.name}\n"
-        f"💵 Narxi: {product.price}$\n"
+        f"💵 Usta haqqi: {product.price}\n"
         f"📂 Kategoriya: {category.name}\n"
         # f"📁 Subkategoriya: {subcategory.name}\n"
         f"👤 Foydalanuvchi: {call.from_user.full_name}"
